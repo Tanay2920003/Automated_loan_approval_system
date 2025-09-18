@@ -8,3 +8,9 @@
 
 
 Visit http://localhost:8080 in your browser to view the landing page.
+
+
+install extentions - https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers
+
+and. https://marketplace.visualstudio.com/items?itemName=ms-azuretools.vscode-containers
+
