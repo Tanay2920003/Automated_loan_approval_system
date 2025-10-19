@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+     <meta charset="UTF-8">
+     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+     <title>Loan Approval Predictor</title>
+</head>
+
+<body>
+     <h2>Loan Approval Predictor</h2>
+     <form id="loanForm">
+          <label>Education: <input name="education" required></label><br>
+          <label>Self Employed: <input name="self_employed" required></label><br>
+          <label>No of Dependents: <input name="no_of_dependents" type="number" required></label><br>
+          <label>Income Annum: <input name="income_annum" type="number" required></label><br>
+          <label>Loan Amount: <input name="loan_amount" type="number" required></label><br>
+          <label>Loan Term: <input name="loan_term" type="number" required></label><br>
+          <label>CIBIL Score: <input name="cibil_score" type="number" required></label><br>
+          <label>Residential Assets Value: <input name="residential_assets_value" type="number" required></label><br>
+          <label>Commercial Assets Value: <input name="commercial_assets_value" type="number" required></label><br>
+          <label>Luxury Assets Value: <input name="luxury_assets_value" type="number" required></label><br>
+          <label>Bank Asset Value: <input name="bank_asset_value" type="number" required></label><br>
+          <button type="submit">Predict</button>
+     </form>
+     <pre id="result"></pre>
+     <script>
+          const form = document.getElementById('loanForm');
+          form.addEventListener('submit', async (e) => {
+               e.preventDefault();
+               const data = Object.fromEntries(new FormData(form));
+               const res = await fetch('http://localhost:5000/predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+               });
+               const json = await res.json();
+               document.getElementById('result').textContent = JSON.stringify(json, null, 2);
+          });
+     </script>
+</body>
+
+</html>
