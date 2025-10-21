@@ -1,15 +1,27 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import joblib
 import pandas as pd
 
+# Initialize FastAPI app
 app = FastAPI(title="Loan Approval Prediction API")
+
+# Enable CORS (important for frontend requests)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins during development
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Load the trained model
 model_data = joblib.load("model.joblib")
 pipeline = model_data["pipeline"]
 features = model_data["features"]
 
+# Define input schema
 class LoanInput(BaseModel):
     no_of_dependents: int
     education: str
@@ -23,10 +35,13 @@ class LoanInput(BaseModel):
     luxury_assets_value: float
     bank_asset_value: float
 
+# Prediction endpoint
 @app.post("/predict")
 def predict_loan(data: LoanInput):
-    # Convert input to DataFrame
+    # Convert input to DataFrame with required feature order
     df = pd.DataFrame([data.dict()])[features]
+
+    # Get prediction
     prediction = pipeline.predict(df)[0]
     proba = pipeline.predict_proba(df)[0][1] if hasattr(pipeline, "predict_proba") else None
 
@@ -34,3 +49,8 @@ def predict_loan(data: LoanInput):
         "loan_approval": "Approved" if prediction == 1 else "Rejected",
         "approval_probability": round(float(proba), 3) if proba is not None else None
     }
+
+# Optional: basic health check route
+@app.get("/")
+def home():
+    return {"message": "Loan Approval API is running"}
