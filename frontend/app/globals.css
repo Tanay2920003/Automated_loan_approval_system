@@ -59,16 +59,17 @@
 }
 
 /* Remove number increment/decrement buttons */
+input[type=number] {
+  -moz-appearance: textfield;
+  /* Firefox */
+}
+
 input[type=number]::-webkit-outer-spin-button,
 input[type=number]::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
 
-input[type=number] {
-  -moz-appearance: textfield;
-  /* Firefox */
-}
 
 /* Hover effect */
 .input:hover {

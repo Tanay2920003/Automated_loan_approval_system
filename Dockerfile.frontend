@@ -1,0 +1,39 @@
+# --- STAGE 1: BUILD THE REACT APPLICATION ---
+# Uses Node 20 as the base for building the application
+FROM node:20-alpine AS builder
+
+# Set the working directory for the Node build process
+# We work directly inside the future container's /app/frontend folder
+WORKDIR /app/frontend
+
+# Copy the dependency files (package.json) first for caching optimization
+# We assume package.json is located in the host's frontend/ directory
+COPY frontend/package.json .
+COPY frontend/package-lock.json .
+
+# Install dependencies
+RUN npm install
+
+# --- FIX: Copy the ENTIRE frontend directory now ---
+# This single command copies all source code, public assets, and config files 
+# from the host's 'frontend' directory into the container's working directory.
+COPY frontend/ .
+
+# Execute the build command. 
+# NOTE: If using create-react-app, the output folder is 'build'. 
+# For Next.js static export, it might be 'out'. 
+RUN npm run build
+
+# --- STAGE 2: SERVE THE APPLICATION (Using Nginx to serve built assets) ---
+# Use a lightweight Nginx server for production hosting
+FROM nginx:alpine
+
+# Copy the built assets from the builder stage
+# IMPORTANT: We assume the build output folder is named 'build'. 
+COPY --from=builder /app/frontend/build /usr/share/nginx/html
+
+# Expose port 80 (Nginx default serving port)
+EXPOSE 80
+
+# Command to start Nginx, serving the application
+CMD ["nginx", "-g", "daemon off;"]

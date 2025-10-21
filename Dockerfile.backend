@@ -1,0 +1,22 @@
+# --- STAGE 1: PYTHON BACKEND BUILD ---
+
+# Use the desired Python version (3.13 as requested)
+FROM python:3.11-slim
+
+# Set the working directory in the container
+WORKDIR /app/backend
+
+# Copy the requirements file and install dependencies
+# We assume the build context is the project root, so we copy from the 'backend/' directory.
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the application code and the trained model file
+COPY backend/app.py .
+COPY backend/model.joblib .
+
+# Expose the port FastAPI runs on
+EXPOSE 8000
+
+# Command to run the application using Uvicorn
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]

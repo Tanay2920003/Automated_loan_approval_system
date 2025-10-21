@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  # ----------------------------------------------------
+  # API Service (Python/FastAPI & ML Model)
+  # ----------------------------------------------------
+  api:
+    container_name: fintech_api
+    # Build using the Dockerfile located in the root directory
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+
+    # Map container port 8000 to host port 8000
+    ports:
+      - "8000:8000"
+
+    # IMPORTANT: Define a volume to ensure the audit database persists on the host.
+    # Maps the container's internal /app/backend/audit.db to the host's ./backend/ folder.
+    volumes:
+      - ./backend:/app/backend
+
+    # Use restart policy to ensure the API tries to recover from failures
+    restart: always
+
+    # Set the working directory explicitly to where the app is located
+    working_dir: /app/backend
+
+  # ----------------------------------------------------
+  # FRONTEND Service (Node/React/Nginx)
+  # ----------------------------------------------------
+  frontend:
+    container_name: fintech_frontend
+    # Build using the Dockerfile located in the root directory
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+
+    # Map container port 80 (Nginx) to host port 3000
+    ports:
+      - "3000:80"
+
+    # Ensure API starts successfully before attempting to run the frontend build
+    depends_on:
+      - api
+
+    # If the application uses hot reloading during development, 
+    # use a more permissive restart policy.
+    restart: unless-stopped
