@@ -8,3 +8,8 @@ link
 ![alt text](image.png)
 Data visuals 
 ![alt text](image-1.png)
+UI
+![alt text](image-2.png)
+![alt text](image-3.png)
+Result
+![alt text](image-4.png)
