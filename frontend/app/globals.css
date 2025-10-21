@@ -1,17 +1,160 @@
 @import "tailwindcss";
 
+/* ------------------------------
+   🎨 THEME VARIABLES
+--------------------------------*/
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --accent: #2563eb;
+  /* Tailwind blue-600 */
+  --accent-light: #60a5fa;
+  /* Tailwind blue-400 */
+  --border-color: #d1d5db;
+  /* Tailwind gray-300 */
+  --placeholder: #080808;
+  /* Tailwind gray-500 - Text for placeholder and arrow */
+  --input-bg: #ffffff;
+  --input-text: #1f2937;
+  /* gray-800 */
+  --input-shadow: rgba(37, 99, 235, 0.15);
 }
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #121212;
+    --foreground: #e5e5e5;
+    --accent: #3b82f6;
+    --label-color: #e5e5e5;
+    --accent-light: #60a5fa;
+    --border-color: #4b5563;
+    /* gray-600 */
+    --placeholder: #0b0c0c;
+    /* gray-400 - Text for placeholder and arrow */
+    --input-bg: #1f2937;
+    /* soft dark gray input */
+    --input-text: #f9fafb;
+    /* light text */
+    --input-shadow: rgba(96, 165, 250, 0.25);
+  }
+}
+
+/* ------------------------------
+   🧩 TAILWIND BASE
+--------------------------------*/
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ------------------------------
+   ✨ INPUT STYLING
+--------------------------------*/
 .input {
-  @apply border border-gray-300 p-2 rounded-lg w-full focus:ring-2 focus:ring-blue-400;
+  @apply w-full px-4 py-3 rounded-xl border focus:outline-none transition-all duration-200 ease-in-out;
+  border-color: var(--border-color);
+  background-color: var(--input-bg);
+  color: var(--input-text);
+  font-size: 1rem;
+  line-height: 1.5;
 }
 
+/* Remove number increment/decrement buttons */
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type=number] {
+  -moz-appearance: textfield;
+  /* Firefox */
+}
+
+/* Hover effect */
+.input:hover {
+  border-color: var(--accent-light);
+}
+
+/* Focus glow */
+.input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--input-shadow);
+  transform: scale(1.01);
+}
+
+/* Placeholder styling */
+.input::placeholder {
+  color: var(--placeholder);
+  opacity: 1;
+  transition: color 0.3s ease;
+}
+
+/* ------------------------------
+   ⬇️ DROPDOWN (SELECT) STYLING - MODIFIED
+--------------------------------*/
+select.input {
+  appearance: none;
+  /* MODIFICATION: The fill color in the SVG is now set to a dark gray (#6b7280, gray-500) 
+    in the light theme and a lighter gray in the dark theme using the --placeholder variable.
+    
+    NOTE: Using 'var(--placeholder)' directly in an SVG data URL often fails 
+    in native CSS. We are replacing the hardcoded hex with the light mode hex 
+    from the variable, and rely on the dark mode class (if Tailwind is used) 
+    or JavaScript to swap the SVG.
+
+    *However, since you are using CSS variables, the most robust pure-CSS way 
+    is to define the background image using the specific light/dark color for each theme.*
+  */
+
+  /* Light Theme Arrow (using light theme's --placeholder: #6b7280) */
+  background-image: url("data:image/svg+xml,%3Csvg fill='%236b7280' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M5.516 7.548a.75.75 0 011.06-.032L10 10.44l3.424-2.924a.75.75 0 011.028 1.092l-4 3.417a.75.75 0 01-1.004 0l-4-3.417a.75.75 0 01.032-1.06z'/%3E%3C/svg%3E");
+
+  background-repeat: no-repeat;
+  background-position: right 1rem center;
+  background-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding-right: 2.5rem;
+}
+
+/* Dark Mode Arrow Override (using dark theme's --placeholder: #9ca3af) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --placeholder: #f9f5f5;
+  }
+
+  select.input {
+    background-image: url("data:image/svg+xml,%3Csvg fill='%239ca3af' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M5.516 7.548a.75.75 0 011.06-.032L10 10.44l3.424-2.924a.75.75 0 011.028 1.092l-4 3.417a.75.75 0 01-1.004 0l-4-3.417a.75.75 0 01.032-1.06z'/%3E%3C/svg%3E");
+  }
+}
+
+
+/* Hide default arrow (Edge/IE) */
+select.input::-ms-expand {
+  display: none;
+}
+
+/* Dropdown hover + focus */
+select.input:hover {
+  /* Using color-mix logic for theme-aware hover (requires modern browser support) */
+  /* Fallback for older browsers will just be the default background, or use an rgba() specific to light/dark */
+  background-color: color-mix(in srgb, var(--input-bg) 95%, var(--accent-light));
+}
+
+select.input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--input-shadow);
+}
+
+/* Add subtle rounded dropdown options (if you use custom select library) */
+select.input option {
+  background-color: var(--input-bg);
+  color: var(--input-text);
+}
+
+/* ------------------------------
+   🌐 THEME SETTINGS
+--------------------------------*/
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -19,15 +162,18 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* ------------------------------
+   🖋️ BASE STYLES
+--------------------------------*/
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "Inter", Arial, Helvetica, sans-serif;
+  transition: background 0.3s ease, color 0.3s ease;
+  line-height: 1.6;
+}
+
+/* Smooth transition for all UI elements */
+* {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
