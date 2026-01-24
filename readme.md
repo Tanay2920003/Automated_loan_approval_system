@@ -1,7 +1,7 @@
 Simple setup is miniconda and env
 # how to run 
 
-//http://127.0.0.1:8000/docs
+//
 link 
 
 
@@ -54,7 +54,7 @@ uvicorn app:app --reload
 
 
 
-
+(for docs -http://127.0.0.1:8000/docs)
 
 Now run front end ( new terminal)
 
