@@ -1,13 +1,11 @@
 Simple setup is miniconda and env
 # how to run 
-pip install -r requirements.txt
 
-uvicorn app:app --reload
-http://127.0.0.1:8000/docs
+//http://127.0.0.1:8000/docs
 link 
 
 
-RUNNING ON 
+RUNNING for backend 1st terminal
 
 
 Create a virtual environment (venv)
@@ -49,6 +47,20 @@ python3 -m venv .venv
 Activate:
 
 source .venv/bin/activate
+
+pip install -r requirements.txt
+
+uvicorn app:app --reload
+
+
+
+
+
+Now run front end ( new terminal)
+
+cd into frontend 
+
+run: npm install;npm run dev
 
 
 
