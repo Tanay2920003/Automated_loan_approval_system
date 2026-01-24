@@ -72,6 +72,7 @@ uvicorn app:app --reload
 ---
 
 ### Frontend Setup (Node.js)
+*In seperate terminal*
 
 #### Step 1: Navigate to frontend folder (in a new terminal)
 ```bash
