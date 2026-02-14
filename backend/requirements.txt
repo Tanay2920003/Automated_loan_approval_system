@@ -7,3 +7,6 @@ uvicorn
 pydantic
 shap
 aiofiles
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart

@@ -1,129 +1,42 @@
 "use client";
-
-import { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import {
+  ShieldCheck,
+  TrendingUp,
+  BarChart3,
+  Activity,
+  BrainCircuit,
+  Lightbulb,
+  ArrowUpRight,
+  TrendingDown,
+  ChevronRight,
+  Plus
+} from "lucide-react";
+import { LoanChart } from "@/components/LoanChart";
+import { KPI } from "@/components/KPI";
 
-// =================================================================
-// CUSTOM SELECT COMPONENT (REQUIRED FOR DROPDOWN UI)
-// =================================================================
-
-type Option = {
-  value: string;
-  label: string;
-};
-
-type CustomSelectProps = {
-  name: string;
-  value: string | null; // Value can be string or null
-  placeholder: string;
-  options: Option[];
-  onChange: (e: { target: { name: string; value: string } }) => void;
-  id: string;
-};
-
-const CustomSelect = ({ name, value, placeholder, options, onChange, id }: CustomSelectProps) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  // Display value uses the actual label or the placeholder text
-  const displayLabel = options.find(opt => opt.value === value)?.label || placeholder;
-
-  const handleClickOutside = useCallback((event: MouseEvent) => {
-    if (ref.current && !ref.current.contains(event.target as Node)) {
-      setIsOpen(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [handleClickOutside]);
-
-  const handleSelect = (optionValue: string) => {
-    onChange({ target: { name, value: optionValue } });
-    setIsOpen(false);
-  };
-
-  return (
-    <div className="relative w-full" ref={ref}>
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        aria-haspopup="listbox"
-        aria-expanded={isOpen}
-        aria-labelledby={id}
-        id={id}
-        // Conditional class for placeholder color: value is null/empty string
-        className={`input flex justify-between items-center cursor-pointer ${value === null || value === "" ? "text-gray-400 dark:text-gray-500" : "text-gray-900 dark:text-white"
-          } hover:shadow-md`}
-      >
-        <span>{displayLabel}</span>
-        <motion.span
-          animate={{ rotate: isOpen ? 180 : 0 }}
-          transition={{ duration: 0.2 }}
-          className="text-gray-500 dark:text-gray-400 ml-2 text-sm"
-        >
-          ▼
-        </motion.span>
-      </button>
-
-      <AnimatePresence>
-        {isOpen && (
-          <motion.ul
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.15 }}
-            role="listbox"
-            className="absolute z-10 w-full mt-1 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 max-h-60 overflow-y-auto"
-            style={{
-              backgroundColor: 'var(--input-bg, #ffffff)',
-              color: 'var(--input-text, #1f2937)'
-            }}
-          >
-            {options.map((option) => (
-              <li
-                key={option.value}
-                onClick={() => handleSelect(option.value)}
-                role="option"
-                // FIX: Pass boolean directly. React handles the string conversion for ARIA attributes.
-                aria-selected={option.value === value}
-                className={`px-4 py-2 cursor-pointer transition-colors duration-100 last:rounded-b-xl first:rounded-t-xl ${option.value === value
-                  ? 'bg-blue-100 dark:bg-blue-800 text-blue-700 dark:text-blue-200 font-semibold'
-                  : 'hover:bg-gray-100 dark:hover:bg-gray-700'
-                  }`}
-              >
-                {option.label}
-              </li>
-            ))}
-          </motion.ul>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-};
-
-// =================================================================
-// HOME COMPONENT (MAIN)
-// =================================================================
-
-// NEW: Define the structure of the Risk Driver object
+// --- Types ---
 type RiskDriver = {
   feature: string;
-  contribution_score: number;
-  effect: string;
+  impact_on_probability: number;
 };
 
-// NEW: Update the result state to include the risk_drivers array
 type PredictResult = {
   loan_approval?: string;
   approval_probability?: number;
+  confidence?: number;
+  risk_band?: string;
+  risk_score?: number;
   risk_drivers?: RiskDriver[];
+  financial_metrics?: {
+    dti_ratio: number;
+    asset_coverage: number;
+    total_assets: number;
+  };
+  actionable_steps?: string[];
 };
 
-// Define FormState structure (numerical fields are set to null)
 type FormState = {
   no_of_dependents: number | null;
   education: string;
@@ -138,9 +51,18 @@ type FormState = {
   bank_asset_value: number | null;
 };
 
+// --- Custom Sub-Components ---
+
+const StatItem = ({ label, value, sub }: { label: string; value: string; sub: string }) => (
+  <div className="p-4 rounded-2xl bg-glass border border-stroke">
+    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">{label}</p>
+    <p className="text-xl font-bold text-white mb-1">{value}</p>
+    <p className="text-[10px] text-emerald-400 font-bold">{sub}</p>
+  </div>
+);
 
 export default function Home() {
-  // INITIALIZED TO NULL FOR NUMERICAL FIELDS
+  const [analytics, setAnalytics] = useState<any>(null);
   const [form, setForm] = useState<FormState>({
     no_of_dependents: null,
     education: "",
@@ -155,361 +77,387 @@ export default function Home() {
     bank_asset_value: null,
   });
 
-  // UPDATED: Use the new PredictResult type
   const [result, setResult] = useState<PredictResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'ai', text: string }[]>([
+    { role: 'ai', text: 'Hi! I am your Financial Copilot. Ask me anything about your credit health.' }
+  ]);
+  const [chatInput, setChatInput] = useState("");
+  const [isSimulationMode, setIsSimulationMode] = useState(false);
+  const [simulationForm, setSimulationForm] = useState<FormState | null>(null);
+  const [isKnowledgeHubOpen, setIsKnowledgeHubOpen] = useState(false);
+  const [knowledgeTerm, setKnowledgeTerm] = useState<any>(null);
 
-  // Options data for the custom dropdowns
-  const educationOptions: Option[] = [
-    { value: "Graduate", label: "Graduate" },
-    { value: "Not Graduate", label: "Not Graduate" },
-  ];
-
-  const selfEmployedOptions: Option[] = [
-    { value: "Yes", label: "Yes" },
-    { value: "No", label: "No" },
-  ];
-
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement> | { target: { name: string; value: string | number | null } }) => {
-    const { name, value } = e.target;
-
-    // Handle CustomSelect (string output) or standard select (string)
-    if (name === "education" || name === "self_employed") {
-      setForm({ ...form, [name]: value as string });
-      return;
+  const fetchAnalytics = useCallback(async () => {
+    try {
+      const res = await fetch("/api/v1/user/analytics");
+      const data = await res.json();
+      setAnalytics(data);
+    } catch (err) {
+      console.error("Analytics error:", err);
     }
-
-    // Handle number inputs
-    const inputElement = e.target as HTMLInputElement;
-
-    if (inputElement.type === "number") {
-      // Convert empty string to null, otherwise convert to number
-      const val = inputElement.value === "" ? null : Number(inputElement.value);
-
-      // Restrict negative values if value is not null
-      if (val !== null && val < 0) return;
-
-      // Explicitly cast name to keyof FormState for type safety
-      setForm(prevForm => ({ ...prevForm, [name as keyof FormState]: val }));
-    } else {
-      // Handle standard string inputs (though none should remain)
-      setForm(prevForm => ({ ...prevForm, [name as keyof FormState]: value as string }));
-    }
-  };
-
-  // NEW EFFECT: Attach JavaScript event listener to block scroll changes
-  useEffect(() => {
-    const handleWheel = (e: WheelEvent) => {
-      // Check if the target is a number input
-      if (e.target instanceof HTMLInputElement && e.target.type === 'number') {
-        // Prevent the default scroll action, which changes the value
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    };
-
-    // Attach the listener to the whole window
-    window.addEventListener('wheel', handleWheel, { passive: false });
-
-    return () => {
-      // Clean up the listener when the component unmounts
-      window.removeEventListener('wheel', handleWheel);
-    };
   }, []);
 
+  useEffect(() => {
+    fetchAnalytics();
+  }, [fetchAnalytics]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const fetchKnowledge = useCallback(async (term: string) => {
+    try {
+      const res = await fetch(`/api/v1/knowledge/${term}`);
+      const data = await res.json();
+      setKnowledgeTerm(data);
+    } catch (err) {
+      console.error("Knowledge error:", err);
+    }
+  }, []);
+
+  const chartData = useMemo(() => {
+    if (!analytics?.score_trend || analytics.score_trend.length === 0) {
+      return [{ time: "Base", prob: 0.5 }, { time: "Now", prob: 0.5 }];
+    }
+    return analytics.score_trend.map((r: any) => ({
+      time: new Date(r.time).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+      prob: r.prob
+    }));
+  }, [analytics]);
+
+  useEffect(() => {
+    if (!isSimulationMode || !simulationForm) return;
+    const delayDebounceFn = setTimeout(async () => {
+      const submissionData = Object.entries(simulationForm).reduce((acc: any, [key, val]) => {
+        acc[key] = (typeof val === 'string' && !isNaN(Number(val)) && val !== "") ? Number(val) : val;
+        if (key === 'education' || key === 'self_employed') acc[key] = val;
+        return acc;
+      }, {});
+      try {
+        const res = await fetch("/api/v1/predict", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(submissionData),
+        });
+        const data = await res.json();
+        setResult(data);
+        fetchAnalytics();
+      } catch (err) { console.error(err); }
+    }, 500);
+    return () => clearTimeout(delayDebounceFn);
+  }, [simulationForm, isSimulationMode, fetchAnalytics]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    // For Synthetic platform, we handle numbers and strings explicitly
+    const isCategorical = name === "education" || name === "self_employed";
+    const val = isCategorical ? value : (value === "" ? null : Number(value));
+
+    const newForm = { ...form, [name]: val };
+    setForm(newForm);
+    if (isSimulationMode) setSimulationForm(newForm);
+  };
+
+  const handleChatSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
+    const userMsg = chatInput;
+    setChatMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+    setChatInput("");
+    try {
+      const res = await fetch("/api/v1/ai/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: userMsg,
+          context: result ? { loan_approval: result.loan_approval, risk_band: result.risk_band, risk_score: result.risk_score } : {}
+        })
+      });
+      const data = await res.json();
+      setChatMessages(prev => [...prev, { role: 'ai', text: data.reply }]);
+    } catch (error) { console.error(error); }
+  };
+
+  const handleSubmitProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setResult(null);
-
-    // Basic validation check for null/empty values
-    const requiredFields: (keyof FormState)[] = [
-      "no_of_dependents", "education", "self_employed", "income_annum",
-      "loan_amount", "loan_term", "cibil_score", "residential_assets_value",
-      "commercial_assets_value", "luxury_assets_value", "bank_asset_value"
-    ];
-
-    // MODIFIED VALIDATION LOGIC: Check explicitly for null or empty string.
-    const isFormValid = requiredFields.every(field => {
-      const val = form[field];
-
-      // 1. Check for null (for numerical fields)
-      if (val === null) return false;
-
-      // 2. Check for empty string (for categorical fields)
-      if (typeof val === 'string' && val === "") return false;
-
-      // 3. Optional: Check if a number is actually NaN (unlikely if inputs are restricted, but safe)
-      if (typeof val === 'number' && isNaN(val)) return false;
-
-      return true;
-    });
-
-    if (!isFormValid) {
-      // Using console.error instead of alert as per instructions
-      alert("Validation failed: Please fill out all fields.");
-      setLoading(false);
-      return;
-    }
-
-    // Ensure all numerical fields are cast to Number/float before sending to FastAPI
-    const submissionData = {
-      // Safely convert all fields, knowing they are not null/empty strings
-      no_of_dependents: Number(form.no_of_dependents),
-      education: form.education,
-      self_employed: form.self_employed,
-      income_annum: Number(form.income_annum),
-      loan_amount: Number(form.loan_amount),
-      loan_term: Number(form.loan_term),
-      cibil_score: Number(form.cibil_score),
-      residential_assets_value: Number(form.residential_assets_value),
-      commercial_assets_value: Number(form.commercial_assets_value),
-      luxury_assets_value: Number(form.luxury_assets_value),
-      bank_asset_value: Number(form.bank_asset_value),
-    };
-
     try {
-      const res = await fetch("/predict", {
+      const submissionData = Object.entries(form).reduce((acc: any, [key, val]) => {
+        acc[key] = val;
+        return acc;
+      }, {});
+      const res = await fetch("/api/v1/predict", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(submissionData),
       });
-
-      if (!res.ok) {
-        // Log the error response details
-        const errorData = await res.json().catch(() => ({ message: "Failed to parse API error." }));
-        console.error("API Error Response:", res.status, errorData);
-        setLoading(false);
-        return;
-      }
-
-      const data: PredictResult = await res.json();
+      const data = await res.json();
       setResult(data);
-    } catch (error) {
-      console.error("Network or API Connection Error:", error);
-    } finally {
-      setLoading(false);
-    }
+      fetchAnalytics();
+    } catch (err) { console.error(err); }
+    finally { setLoading(false); }
   };
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-100 to-blue-200 dark:from-gray-900 dark:to-gray-800 px-5 py-10 transition-colors">
-      <motion.div
-        initial={{ opacity: 0, y: 40 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-3xl bg-white dark:bg-gray-800 shadow-2xl rounded-3xl p-8 border border-gray-100 dark:border-gray-700 transition-colors"
-      >
-        <h1 className="text-4xl font-extrabold text-center mb-2 text-blue-800 dark:text-blue-400 tracking-tight">
-          FinTech-Approve
-        </h1>
-        <p className="text-center text-gray-500 dark:text-gray-300 mb-8">
-          Fill in your financial details to check your loan approval chances.
-        </p>
-
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {/* Applicant Info */}
-          <h2 className="col-span-full text-lg font-semibold text-gray-700 dark:text-gray-200 border-b pb-1 mb-2 text-center">
-            👤 Applicant Information
-          </h2>
-
-          {/* Dependents Field */}
-          <div className="flex flex-col">
-            <label htmlFor="dependents" className="label">Number of Dependents</label>
-            <input
-              id="dependents"
-              name="no_of_dependents"
-              type="number"
-              placeholder="e.g., 2"
-              value={form.no_of_dependents ?? ''} // Use nullish coalescing for display
-              onChange={handleChange}
-              min={0}
-              className="input"
-            />
-          </div>
-
-          {/* Education dropdown */}
-          <div className="flex flex-col">
-            <label htmlFor="education" className="label">Education Level</label>
-            <CustomSelect
-              id="education"
-              name="education"
-              value={form.education}
-              placeholder="Select Education"
-              options={educationOptions}
-              onChange={handleChange}
-            />
-          </div>
-
-          {/* Self Employed dropdown */}
-          <div className="flex flex-col">
-            <label htmlFor="self_employed" className="label">Self Employed Status</label>
-            <CustomSelect
-              id="self_employed"
-              name="self_employed"
-              value={form.self_employed}
-              placeholder="Are you self-employed?"
-              options={selfEmployedOptions}
-              onChange={handleChange}
-            />
-          </div>
-
-          {/* CIBIL Score Field */}
-          <div className="flex flex-col">
-            <label htmlFor="cibil_score" className="label">CIBIL Score</label>
-            <input
-              id="cibil_score"
-              name="cibil_score"
-              type="number"
-              placeholder="e.g., 750 (300-900)"
-              value={form.cibil_score ?? ''}
-              onChange={handleChange}
-              min={0}
-              max={900} // Added max for score guidance
-              className="input"
-            />
-          </div>
-
-
-          {/* Financial Info */}
-          <h2 className="col-span-full text-lg font-semibold text-gray-700 dark:text-gray-200 border-b pb-1 mt-4 mb-2 text-center">
-            💰 Financial Details
-          </h2>
-
-          {/* Annual Income Field */}
-          <div className="flex flex-col">
-            <label htmlFor="income_annum" className="label">Annual Income (₹)</label>
-            <input id="income_annum" name="income_annum" type="number" placeholder="e.g., 4000000" value={form.income_annum ?? ''} onChange={handleChange} min={0} className="input" />
-          </div>
-
-          {/* Loan Amount Field */}
-          <div className="flex flex-col">
-            <label htmlFor="loan_amount" className="label">Requested Loan Amount (₹)</label>
-            <input id="loan_amount" name="loan_amount" type="number" placeholder="e.g., 15000000" value={form.loan_amount ?? ''} onChange={handleChange} min={0} className="input" />
-          </div>
-
-          {/* Loan Term Field */}
-          <div className="flex flex-col">
-            <label htmlFor="loan_term" className="label">Loan Term (Years)</label>
-            <input id="loan_term" name="loan_term" type="number" placeholder="e.g., 15" value={form.loan_term ?? ''} onChange={handleChange} min={0} className="input" />
-          </div>
-
-          <span className="col-span-full"></span> {/* Empty span to balance the grid if needed */}
-
-
-          {/* Assets */}
-          <h2 className="col-span-full text-lg font-semibold text-gray-700 dark:text-gray-200 border-b pb-1 mt-4 mb-2 text-center">
-            🏠 Assets Information
-          </h2>
-
-          {/* Residential Assets Field */}
-          <div className="flex flex-col">
-            <label htmlFor="residential_assets_value" className="label">Residential Assets Value (₹)</label>
-            <input id="residential_assets_value" name="residential_assets_value" type="number" placeholder="e.g., 5000000" value={form.residential_assets_value ?? ''} onChange={handleChange} min={0} className="input" />
-          </div>
-
-          {/* Commercial Assets Field */}
-          <div className="flex flex-col">
-            <label htmlFor="commercial_assets_value" className="label">Commercial Assets Value (₹)</label>
-            <input id="commercial_assets_value" name="commercial_assets_value" type="number" placeholder="e.g., 1000000" value={form.commercial_assets_value ?? ''} onChange={handleChange} min={0} className="input" />
-          </div>
-
-          {/* Luxury Assets Field */}
-          <div className="flex flex-col">
-            <label htmlFor="luxury_assets_value" className="label">Luxury Assets Value (₹)</label>
-            <input id="luxury_assets_value" name="luxury_assets_value" type="number" placeholder="e.g., 2000000" value={form.luxury_assets_value ?? ''} onChange={handleChange} min={0} className="input" />
-          </div>
-
-          {/* Bank Assets Field */}
-          <div className="flex flex-col">
-            <label htmlFor="bank_asset_value" className="label">Bank Balance (₹)</label>
-            <input id="bank_asset_value" name="bank_asset_value" type="number" placeholder="e.g., 500000" value={form.bank_asset_value ?? ''} onChange={handleChange} min={0} className="input" />
-          </div>
-
+    <div className="min-h-screen p-6 md:p-10 space-y-10 pb-32">
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <h1 className="text-4xl font-extrabold text-white tracking-tight mb-2">
+            Intelligence <span className="text-blue-500">Dashboard</span>
+          </h1>
+          <p className="text-gray-400 font-medium">Real-time simulation and financial credit audit platform.</p>
+        </div>
+        <div className="flex items-center gap-4">
           <button
-            type="submit"
-            disabled={loading}
-            className="col-span-full mt-6 bg-blue-600 dark:bg-blue-500 text-white font-semibold py-3 rounded-xl shadow hover:bg-blue-700 dark:hover:bg-blue-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => setIsSimulationMode(!isSimulationMode)}
+            className={`px-8 py-3 rounded-2xl font-bold text-sm transition-all flex items-center gap-2 border ${isSimulationMode
+                ? "bg-blue-600 border-blue-500 shadow-xl shadow-blue-900/40"
+                : "bg-glass border-stroke text-gray-400 hover:text-white"
+              }`}
           >
-            {loading ? "Analyzing..." : "Predict Loan Approval"}
+            {isSimulationMode ? <Activity size={16} /> : <Plus size={16} />}
+            {isSimulationMode ? "Simulation Active" : "New Simulation"}
           </button>
-        </form>
+        </div>
+      </div>
 
-        <AnimatePresence>
-          {result && (
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className={`mt-8 text-center rounded-2xl p-6 font-semibold ${result.loan_approval === "Approved"
-                ? "bg-green-50 dark:bg-green-900 border border-green-200 dark:border-green-700 text-green-700 dark:text-green-300"
-                : "bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-300"
-                }`}
-            >
-              <h2 className="text-2xl mb-2">
-                {result.loan_approval === "Approved" ? "✅ Loan Approved" : "❌ Loan Rejected"}
-              </h2>
-              {result.approval_probability !== undefined && (
-                <p className="text-gray-600 dark:text-gray-300 text-lg">
-                  Approval Probability:{" "}
-                  <span className="font-bold text-gray-800 dark:text-gray-100">
-                    {Math.round(result.approval_probability * 100)}%
-                  </span>
-                </p>
-              )}
+      {/* KPI Row */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <KPI
+          title="Synthetic Score"
+          value={analytics?.synthetic_score || 720}
+          delta="+14%"
+          icon={<BrainCircuit size={20} />}
+        />
+        <KPI
+          title="Approval Likelihood"
+          value={result?.approval_probability ? `${Math.round(result.approval_probability * 100)}%` : "84%"}
+          delta="+2.4%"
+          icon={<Activity size={20} />}
+        />
+        <KPI
+          title="DTI Balance"
+          value={analytics?.behavioral_metrics?.dti ? `${(analytics.behavioral_metrics.dti * 100).toFixed(1)}%` : "32%"}
+          delta="-0.5%"
+          isPositive={true}
+          icon={<TrendingDown size={20} />}
+        />
+        <KPI
+          title="Asset Coverage"
+          value={analytics?.behavioral_metrics?.asset_coverage ? `${analytics.behavioral_metrics.asset_coverage}x` : "1.8x"}
+          delta="+0.1x"
+          icon={<BarChart3 size={20} />}
+        />
+      </div>
 
-              {/* XAI Risk Driver Visualization Section */}
-              {result.risk_drivers && result.risk_drivers.length > 0 && (
-                <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700 text-left">
-                  <h3 className="text-xl font-bold mb-3 text-gray-800 dark:text-gray-200 text-center">
-                    📊 Top 3 Risk Drivers
-                  </h3>
-                  <ul className="space-y-2 w-full max-w-md mx-auto">
-                    {/* Display only top 3 drivers for focus */}
-                    {result.risk_drivers.slice(0, 3).map((driver, index) => (
-                      <li key={index} className="flex justify-between items-center text-base p-2 bg-white dark:bg-gray-700 rounded-lg shadow-sm">
-                        <span className="font-medium text-gray-700 dark:text-gray-200">{driver.feature}</span>
-                        <span
-                          className={`font-bold py-0.5 px-2 rounded-full text-xs whitespace-nowrap ${driver.effect === "Support Rejection"
-                            ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
-                            : 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
-                            }`}
-                        >
-                          {driver.effect === "Support Rejection" ? "RISK FACTOR" : "POSITIVE FACTOR"}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="text-xs mt-3 text-gray-500 dark:text-gray-400 text-center">
-                    *These factors contributed most significantly to the AI's prediction.
-                  </p>
+      {/* Main Grid: Charts & Stats */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2 space-y-8">
+          <LoanChart data={chartData} />
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <StatItem label="Active Users" value="2,340" sub="+12% from last week" />
+            <StatItem label="Avg Approval" value="78%" sub="Stable trend" />
+            <StatItem label="Global Rank" value="#42" sub="Top 5% financial health" />
+          </div>
+        </div>
+
+        <div className="space-y-8">
+          {/* Action Plan */}
+          <div className="glass-card p-6 border-l-4 border-l-blue-600">
+            <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+              <Lightbulb size={20} className="text-blue-500" /> Improvement Plan
+            </h3>
+            {result?.actionable_steps ? (
+              <div className="space-y-4">
+                {result.actionable_steps.map((step, i) => (
+                  <div key={i} className="flex gap-3 items-start group">
+                    <div className="w-5 h-5 rounded-full bg-blue-600 flex-shrink-0 flex items-center justify-center text-[10px] font-bold mt-0.5">
+                      {i + 1}
+                    </div>
+                    <p className="text-xs text-gray-300 leading-relaxed group-hover:text-white transition-colors">{step}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-500 italic">Adjust values in simulation mode to see live improvement strategies.</p>
+            )}
+          </div>
+
+          {/* Behavioral Radar (Simulated) */}
+          <div className="glass-card p-6">
+            <h3 className="font-bold mb-6 flex items-center gap-2">
+              <TrendingUp size={18} className="text-emerald-500" /> Behavioral Audit
+            </h3>
+            <div className="space-y-6">
+              {[
+                { label: "Payment Consistency", val: 92, color: "bg-blue-600" },
+                { label: "Credit Depth", val: 74, color: "bg-cyan-500" },
+                { label: "Asset Stability", val: 81, color: "bg-indigo-600" }
+              ].map(stat => (
+                <div key={stat.label}>
+                  <div className="flex justify-between text-[10px] font-bold uppercase mb-2 opacity-50">
+                    <span>{stat.label}</span>
+                    <span>{stat.val}%</span>
+                  </div>
+                  <div className="h-1.5 w-full bg-glass-strong rounded-full overflow-hidden">
+                    <motion.div initial={{ width: 0 }} animate={{ width: `${stat.val}%` }} className={`h-full ${stat.color}`} />
+                  </div>
                 </div>
-              )}
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Simulator / Form Section */}
+      <div className="glass-card p-8 bg-gradient-to-br from-glass to-base relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-4 opacity-5">
+          <ShieldCheck size={200} />
+        </div>
+        <div className="flex items-center gap-3 mb-8">
+          <div className="w-10 h-10 bg-blue-600/20 rounded-xl flex items-center justify-center text-blue-500">
+            <Activity size={24} />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold">Financial <span className="text-gray-500">Simulator</span></h2>
+            <p className="text-xs text-gray-400">Tweak parameters to see immediate impact on scores.</p>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmitProfile} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 relative z-10">
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-gray-500 uppercase px-1 tracking-widest">Income (Annual)</label>
+            <input name="income_annum" type="number" value={form.income_annum || ""} onChange={handleChange} className="w-full bg-glass p-4 rounded-xl border border-stroke text-sm focus:border-blue-500 outline-none transition-all" />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-gray-500 uppercase px-1 tracking-widest">Loan Amount</label>
+            <input name="loan_amount" type="number" value={form.loan_amount || ""} onChange={handleChange} className="w-full bg-glass p-4 rounded-xl border border-stroke text-sm focus:border-blue-500 outline-none transition-all" />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-gray-500 uppercase px-1 tracking-widest">CIBIL Score</label>
+            <input name="cibil_score" type="number" value={form.cibil_score || ""} onChange={handleChange} className="w-full bg-glass p-4 rounded-xl border border-stroke text-sm focus:border-blue-500 outline-none transition-all" />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-gray-500 uppercase px-1 tracking-widest">Bank Assets</label>
+            <input name="bank_asset_value" type="number" value={form.bank_asset_value || ""} onChange={handleChange} className="w-full bg-glass p-4 rounded-xl border border-stroke text-sm focus:border-blue-500 outline-none transition-all" />
+          </div>
+
+          <div className="lg:col-span-4 pt-4">
+            <button type="submit" className="w-full py-4 bg-blue-600 rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-xl shadow-blue-900/30">
+              {loading ? "Processing..." : "Generate Intelligence Audit"}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* AI Sidebar Toggle */}
+      <button
+        onClick={() => setIsChatOpen(!isChatOpen)}
+        className="fixed bottom-10 right-10 w-16 h-16 bg-blue-600 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-50 group overflow-hidden"
+      >
+        <motion.div animate={{ rotate: isChatOpen ? 90 : 0 }}>
+          {isChatOpen ? <Plus className="rotate-45" /> : <BrainCircuit />}
+        </motion.div>
+        <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500" />
+      </button>
+
+      {/* Floating Chat UI */}
+      <AnimatePresence>
+        {isChatOpen && (
+          <motion.div
+            initial={{ y: 100, opacity: 0, scale: 0.9 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 100, opacity: 0, scale: 0.9 }}
+            className="fixed bottom-32 right-10 w-80 md:w-96 glass-card h-[500px] flex flex-col z-50 shadow-2xl border-blue-500/20"
+          >
+            <div className="p-4 bg-blue-600 flex justify-between items-center rounded-t-[23px]">
+              <div className="flex items-center gap-2">
+                <BrainCircuit size={18} />
+                <span className="font-bold text-sm text-white">Financial Copilot</span>
+              </div>
+              <button onClick={() => setIsChatOpen(false)} className="text-white/60 hover:text-white">✕</button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {chatMessages.map((m, i) => (
+                <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[80%] p-3 rounded-2xl text-[11px] font-medium ${m.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none shadow-lg' : 'bg-glass-strong text-gray-200 rounded-tl-none border border-stroke'
+                    }`}>
+                    {m.text}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <form onSubmit={handleChatSubmit} className="p-4 border-t border-stroke flex gap-2">
+              <input
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Ask me anything..."
+                className="flex-1 bg-glass p-4 rounded-xl text-xs outline-none focus:border-blue-500 border border-transparent transition-all"
+              />
+              <button type="submit" className="p-4 bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors shadow-lg">
+                <ArrowUpRight size={16} />
+              </button>
+            </form>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Glossary Hub */}
+      <div className="flex flex-wrap gap-4 items-center justify-center pt-10 border-t border-stroke">
+        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mr-4">Financial Glossary</p>
+        {['CIBIL', 'Debt-to-Income', 'Credit-Utilization'].map(t => (
+          <button
+            key={t}
+            onClick={() => { fetchKnowledge(t); setIsKnowledgeHubOpen(true); }}
+            className="px-5 py-2.5 bg-glass border border-stroke rounded-xl text-[10px] font-bold hover:border-blue-500/50 hover:bg-blue-600/5 transition-all text-gray-300 hover:text-white"
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {/* Knowledge Popup Modal */}
+      <AnimatePresence>
+        {isKnowledgeHubOpen && knowledgeTerm && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-base/90 backdrop-blur-xl flex items-center justify-center z-[100] p-6 lg:p-0"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }}
+              className="glass-card max-w-xl w-full p-10 relative border-blue-500/20 shadow-2xl"
+            >
+              <button onClick={() => setIsKnowledgeHubOpen(false)} className="absolute top-10 right-10 text-gray-500 hover:text-white transition-colors">✕</button>
+              <h2 className="text-3xl font-extrabold mb-4 bg-gradient-to-r from-blue-500 to-cyan-400 bg-clip-text text-transparent">{knowledgeTerm.title}</h2>
+              <p className="text-gray-400 text-sm leading-relaxed mb-8">{knowledgeTerm.definition}</p>
+
+              <div className="grid grid-cols-2 gap-6 mb-8">
+                <div className="bg-blue-600/5 p-6 rounded-3xl border border-blue-500/10 text-center">
+                  <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mb-1">Target</p>
+                  <p className="text-2xl font-black text-white">{knowledgeTerm.ideal_range}</p>
+                </div>
+                <div className="bg-cyan-600/5 p-6 rounded-3xl border border-cyan-500/10 text-center">
+                  <p className="text-[10px] font-bold text-cyan-400 uppercase tracking-widest mb-1">Status</p>
+                  <p className="text-2xl font-black text-white">Recommended</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                  <ArrowUpRight size={14} className="text-blue-500" /> Best Practices
+                </p>
+                {(Array.isArray(knowledgeTerm.how_to_improve) ? knowledgeTerm.how_to_improve : [knowledgeTerm.how_to_improve]).map((tip: string, i: number) => (
+                  <div key={i} className="flex items-center gap-4 p-4 bg-glass border border-stroke rounded-2xl text-xs font-semibold hover:border-blue-500/30 transition-all cursor-default">
+                    <div className="w-2 h-2 rounded-full bg-blue-500 shadow-lg shadow-blue-500/50" /> {tip}
+                  </div>
+                ))}
+              </div>
             </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
-
-      <footer className="mt-10 text-gray-500 dark:text-gray-400 text-sm">
-        © {new Date().getFullYear()} Automated Loan Approval System | Built with FastAPI + Next.js
-      </footer>
-
-      {/* CSS Fix for Trackpad Scrolling & Default UI */}
-      <style>
-        {`
-					/* Disable scroll-to-change functionality for number inputs */
-					input[type='number'] {
-						-moz-appearance: textfield; /* Firefox */
-					}
-
-					input[type='number']::-webkit-inner-spin-button, 
-					input[type='number']::-webkit-outer-spin-button {
-						-webkit-appearance: none;
-						margin: 0;
-					}
-				`}
-      </style>
-    </main>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }

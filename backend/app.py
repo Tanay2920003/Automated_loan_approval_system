@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 import joblib
 import pandas as pd
@@ -10,6 +11,9 @@ import json
 import os
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from typing import Optional, List, Dict
+import auth
+import datetime
 
 # --- Configuration ---
 MODEL_FILE = "model.joblib"
@@ -38,14 +42,28 @@ def init_db():
         conn = sqlite3.connect(DATABASE_FILE)
         cursor = conn.cursor()
         
+        # User account table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE,
+                hashed_password TEXT,
+                full_name TEXT
+            )
+        """)
+
         # Table schema to store decision details and XAI reasons
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS loan_audits (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
                 timestamp TEXT,
                 loan_approval TEXT,
                 approval_probability REAL,
+                risk_band TEXT,            -- Added in Phase 3
                 input_data TEXT,           -- Original JSON input data
-                risk_drivers_json TEXT     -- XAI drivers stored as JSON string
+                risk_drivers_json TEXT,    -- XAI drivers stored as JSON string
+                FOREIGN KEY (user_id) REFERENCES users (id)
             )
         """)
         conn.commit()
@@ -57,7 +75,32 @@ def init_db():
 # Run initialization once on server startup
 init_db()
 
-def log_audit_entry(input_data: dict, loan_approval: str, proba: float, risk_drivers: list):
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
+
+def get_current_user(token: str = Depends(oauth2_scheme)):
+    payload = auth.decode_access_token(token)
+    if payload is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    username: str = payload.get("sub")
+    if username is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    
+    conn = sqlite3.connect(DATABASE_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, username, full_name FROM users WHERE username = ?", (username,))
+    user = cursor.fetchone()
+    conn.close()
+    
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    
+    return {"id": user[0], "username": user[1], "full_name": user[2]}
+
+def log_audit_entry(user_id: Optional[int], input_data: dict, loan_approval: str, proba: float, risk_band: str, risk_drivers: list):
     """Saves a single decision record to the audit table."""
     try:
         conn = sqlite3.connect(DATABASE_FILE)
@@ -70,9 +113,9 @@ def log_audit_entry(input_data: dict, loan_approval: str, proba: float, risk_dri
         timestamp = pd.Timestamp.now().isoformat()
         
         cursor.execute("""
-            INSERT INTO loan_audits (timestamp, loan_approval, approval_probability, input_data, risk_drivers_json)
-            VALUES (?, ?, ?, ?, ?)
-        """, (timestamp, loan_approval, proba, input_data_json, risk_drivers_json))
+            INSERT INTO loan_audits (user_id, timestamp, loan_approval, approval_probability, risk_band, input_data, risk_drivers_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (user_id, timestamp, loan_approval, proba, risk_band, input_data_json, risk_drivers_json))
         
         conn.commit()
         conn.close()
@@ -135,6 +178,80 @@ except Exception as e:
     # If SHAP fails, define a generic list of feature names to prevent a crash later
     transformed_feature_names = [] 
 
+class UserRegister(BaseModel):
+    username: str
+    password: str
+    full_name: str
+
+class UserLogin(BaseModel):
+    username: str
+    password: str
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+# Auth Endpoints
+@app.post("/api/v1/auth/register")
+def register(user: UserRegister):
+    conn = sqlite3.connect(DATABASE_FILE)
+    cursor = conn.cursor()
+    
+    # Check if user exists
+    cursor.execute("SELECT id FROM users WHERE username = ?", (user.username,))
+    if cursor.fetchone():
+        conn.close()
+        raise HTTPException(status_code=400, detail="Username already registered")
+    
+    hashed_pw = auth.get_password_hash(user.password)
+    cursor.execute("INSERT INTO users (username, hashed_password, full_name) VALUES (?, ?, ?)", 
+                   (user.username, hashed_pw, user.full_name))
+    conn.commit()
+    conn.close()
+    return {"message": "User registered successfully"}
+
+@app.post("/api/v1/auth/login", response_model=Token)
+def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    conn = sqlite3.connect(DATABASE_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT hashed_password FROM users WHERE username = ?", (form_data.username,))
+    result = cursor.fetchone()
+    conn.close()
+    
+    if not result or not auth.verify_password(form_data.password, result[0]):
+        raise HTTPException(status_code=400, detail="Incorrect username or password")
+    
+    access_token = auth.create_access_token(data={"sub": form_data.username})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.get("/api/v1/user/profile")
+def get_profile(current_user: dict = Depends(get_current_user)):
+    conn = sqlite3.connect(DATABASE_FILE)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT timestamp, loan_approval, approval_probability, input_data, risk_drivers_json 
+        FROM loan_audits 
+        WHERE user_id = ? 
+        ORDER BY timestamp DESC
+    """, (current_user["id"],))
+    results = cursor.fetchall()
+    conn.close()
+    
+    history = []
+    for row in results:
+        history.append({
+            "timestamp": row[0],
+            "loan_approval": row[1],
+            "approval_probability": row[2],
+            "input_data": json.loads(row[3]),
+            "risk_drivers": json.loads(row[4])
+        })
+    
+    return {
+        "user": current_user,
+        "application_history": history
+    }
+
 # Define input schema (UNCHANGED)
 class LoanInput(BaseModel):
     # Set to float to match the numerical treatment in the ML pipeline
@@ -152,7 +269,16 @@ class LoanInput(BaseModel):
 
 # Prediction endpoint
 @app.post("/predict")
-def predict_loan(data: LoanInput):
+@app.post("/api/v1/predict")
+def predict_loan(data: LoanInput, token: Optional[str] = Depends(oauth2_scheme)):
+    # Extract user if token is provided
+    current_user = None
+    if token:
+        try:
+            current_user = get_current_user(token)
+        except:
+            pass # Prediction continues as anonymous if token is invalid
+            
     if pipeline is None:
         return {"error": "Model not loaded. Check server logs."}
         
@@ -166,59 +292,228 @@ def predict_loan(data: LoanInput):
     # 1. Apply Decision Logic (Configurable Business Rule Engine)
     if proba is None:
         loan_approval = "Error"
+        confidence = 0
+        risk_band = "Unknown"
     # FIX: If P(Approval) is greater than or equal to threshold, APPROVE.
     elif proba >= RISK_THRESHOLD:
         loan_approval = "Approved"
+        confidence = float(proba)
+        # Higher proba = Lower risk
+        risk_band = "Low" if proba > 0.8 else "Medium"
     # Otherwise, REJECT.
     else:
         loan_approval = "Rejected"
+        confidence = float(1 - proba)
+        # Lower proba = Higher risk
+        risk_band = "High" if proba < 0.3 else "Medium"
 
-    # 2. Calculate Explainable AI (XAI) - SHAP Values (MODIFIED CALL)
+    # 2. Calculate Financial Ratios (New in Phase 2)
+    # Annual EMI estimate (principal only for simplicity)
+    annual_emi = data.loan_amount / max(data.loan_term, 1)
+    dti_ratio = round(annual_emi / max(data.income_annum, 1), 2)
+    
+    total_assets = (data.residential_assets_value + data.commercial_assets_value + 
+                    data.luxury_assets_value + data.bank_asset_value)
+    asset_coverage = round(total_assets / max(data.loan_amount, 1), 2)
+
+    # 3. Calculate Explainable AI (XAI) - SHAP Values (MODIFIED CALL)
     
     # Transform the single input instance using the fitted preprocessor 
     X_transformed = preprocessor.transform(df) 
     
     # Calculate SHAP values on the transformed input using the specialized explainer
-    # We use the transformed_feature_names to map the results back correctly
-    shap_values = explainer.shap_values(X_transformed)[0] # [0] extracts the result for the single row
+    shap_values = explainer.shap_values(X_transformed)[0]
     
-    # Combine transformed feature names with their SHAP values
     feature_contributions = list(zip(transformed_feature_names, shap_values))
-    
-    # Sort contributions by absolute value to find the top 5 drivers
     sorted_contributions = sorted(feature_contributions, key=lambda x: abs(x[1]), reverse=True)
     
-    # Format top 5 drivers for the frontend
     risk_drivers = []
     for feature, contribution in sorted_contributions[:5]:
-        # Clean up feature name (handles OHE names like 'education_Graduate')
         clean_feature = feature.replace('_', ' ').title().replace('Graduate', 'Education: Graduate')
-        
         risk_drivers.append({
             "feature": clean_feature,
             "contribution_score": float(contribution),
             "effect": "Support Rejection" if contribution > 0 else "Support Approval"
         })
 
-    # 3. LOG THE AUDIT ENTRY (Crucial for Synopsis Compliance)
+    # 4. Generate Actionable Next Steps (New in Phase 2)
+    actionable_steps = []
+    if loan_approval == "Rejected":
+        # Find strongest support for rejection
+        top_rejector = sorted(risk_drivers, key=lambda x: x["contribution_score"] if x["effect"] == "Support Rejection" else -999, reverse=True)[0]
+        if "Cibil" in top_rejector["feature"]:
+            actionable_steps.append("Focus on improving your CIBIL score. A score above 750 is ideal for this loan amount.")
+        elif "Income" in top_rejector["feature"] or "Amount" in top_rejector["feature"]:
+            actionable_steps.append("Consider reducing your loan amount request or declaring additional supplementary income.")
+        elif "Asset" in top_rejector["feature"]:
+            actionable_steps.append("Increasing your declared asset value (e.g., bank balance or residential assets) could shift the decision.")
+        else:
+            actionable_steps.append(f"Targeted improvement in {top_rejector['feature']} would significantly boost your approval odds.")
+    else:
+        if risk_band == "Medium":
+            actionable_steps.append("You are in the Medium risk band. Maintaining your CIBIL score for 6 more months could move you to Low risk.")
+        else:
+            actionable_steps.append("Your profile is strong! Continue maintaining your current debt-to-income balance.")
+
+    # 5. LOG THE AUDIT ENTRY
     log_audit_entry(
+        user_id=current_user["id"] if current_user else None,
         input_data=data.dict(),
         loan_approval=loan_approval,
         proba=proba,
+        risk_band=risk_band,
         risk_drivers=risk_drivers
     )
 
-    # 4. Return Full, Structured Response to Frontend 
+    # 6. Return Enhanced Response
     return {
         "loan_approval": loan_approval,
         "approval_probability": round(float(proba), 3) if proba is not None else None,
-        "risk_drivers": risk_drivers 
+        "confidence": round(confidence, 2),
+        "risk_band": risk_band,
+        "risk_score": round(float(1 - proba), 2) if proba is not None else None,
+        "risk_drivers": risk_drivers,
+        "financial_metrics": {
+            "dti_ratio": dti_ratio,
+            "asset_coverage": asset_coverage,
+            "total_assets": total_assets
+        },
+        "actionable_steps": actionable_steps
     }
 
 # Optional: basic health check route (EXISTING)
 @app.get("/health")
+@app.get("/api/v1/health")
 def health():
-    return {"message": "FinTech-Approve API is running. Model ready."}
+    return {
+        "status": "online",
+        "version": "v1.0.0",
+        "message": "FinTech-Approve AI Intelligence Platform is running."
+    }
+
+@app.get("/api/v1/knowledge/{term}")
+async def get_glossary(term: str):
+    knowledge_base = {
+        "cibil": {
+            "title": "CIBIL Score",
+            "definition": "A 3-digit numeric summary of your credit history, ranging from 300 to 900.",
+            "ideal_range": "750+",
+            "how_to_improve": ["Pay bills on time", "Keep credit utilization low", "Avoid frequent loan applications"]
+        },
+        "debt-to-income": {
+            "title": "Debt-to-Income Ratio",
+            "definition": "The percentage of your gross monthly income that goes toward paying monthly debt.",
+            "ideal_range": "Below 36%",
+            "how_to_improve": ["Reduce monthly recurring debt", "Increase your gross monthly income"]
+        },
+        "credit-utilization": {
+            "title": "Credit Utilization",
+            "definition": "The ratio of your outstanding credit balance to your total credit limit.",
+            "ideal_range": "Below 30%",
+            "how_to_improve": ["Pay off balances early", "Increase credit limits without spending more"]
+        }
+    }
+    return knowledge_base.get(term.lower(), {"error": "Term not found in knowledge base."})
+
+@app.get("/api/v1/user/analytics")
+def get_user_analytics(current_user: Optional[dict] = Depends(get_current_user)):
+    """Retrieves time-series data and behavioral metrics for the personal dashboard."""
+    user_id = current_user["id"] if current_user else None
+    
+    try:
+        conn = sqlite3.connect(DATABASE_FILE)
+        cursor = conn.cursor()
+        
+        # 1. Trend Data (Last 10 applications)
+        cursor.execute("""
+            SELECT timestamp, approval_probability, risk_band 
+            FROM loan_audits 
+            WHERE user_id IS ? OR (user_id IS NULL AND ? IS NULL)
+            ORDER BY timestamp ASC LIMIT 10
+        """, (user_id, user_id))
+        history = [{"time": r[0], "prob": r[1], "band": r[2]} for r in cursor.fetchall()]
+        
+        # 2. Behavioral Ratios (Most Recent)
+        cursor.execute("SELECT input_data FROM loan_audits WHERE user_id IS ? ORDER BY timestamp DESC LIMIT 1", (user_id,))
+        recent = cursor.fetchone()
+        metrics = {}
+        if recent:
+            data = json.loads(recent[0])
+            income = data.get('income_annum', 0) / 12
+            loan = data.get('loan_amount', 0)
+            term = data.get('loan_term', 1)
+            metrics = {
+                "dti": round((loan / term) / income, 2) if income > 0 else 0,
+                "asset_coverage": round((data.get('residential_assets_value', 0) + data.get('bank_asset_value', 0)) / loan, 2) if loan > 0 else 0,
+                "stability_index": "High" if data.get('cibil_score', 0) > 700 else "Moderate"
+            }
+            
+        conn.close()
+        return {
+            "score_trend": history,
+            "behavioral_metrics": metrics,
+            "synthetic_score": 700 + (len(history) * 10) # Mock synthetic score growth
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+class ChatRequest(BaseModel):
+    message: str
+    context: dict = {}
+
+@app.get("/api/v1/admin/stats")
+def get_admin_stats():
+    """Aggregates loan application data for the admin dashboard."""
+    try:
+        conn = sqlite3.connect(DATABASE_FILE)
+        cursor = conn.cursor()
+        
+        # 1. Basic Counts
+        cursor.execute("SELECT COUNT(*), SUM(CASE WHEN loan_approval='Approved' THEN 1 ELSE 0 END) FROM loan_audits")
+        total, approved = cursor.fetchone()
+        
+        # 2. Risk Distribution
+        cursor.execute("SELECT risk_band, COUNT(*) FROM loan_audits GROUP BY risk_band")
+        risk_dist = dict(cursor.fetchall())
+        
+        # 3. Recent Activity (Last 5)
+        cursor.execute("SELECT timestamp, loan_approval, approval_probability, risk_band FROM loan_audits ORDER BY timestamp DESC LIMIT 5")
+        recent = [{"time": r[0], "status": r[1], "score": r[2], "band": r[3]} for r in cursor.fetchall()]
+        
+        conn.close()
+        return {
+            "total_applications": total or 0,
+            "approval_rate": round((approved / total) * 100, 1) if total and approved else 0,
+            "risk_distribution": risk_dist,
+            "recent_activity": recent
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.post("/api/v1/ai/chat")
+async def ai_chat(request: ChatRequest):
+    """Upgraded Advisor that takes application context into account."""
+    msg = request.message.lower()
+    ctx = request.context # Contains recent prediction data
+    
+    # Context-aware logic
+    if ctx and "loan_approval" in ctx:
+        status = ctx["loan_approval"]
+        band = ctx.get("risk_band", "High")
+        
+        if "my result" in msg or "why" in msg:
+            if status == "Rejected":
+                return {"reply": f"Your application was rejected because our model identified you in the {band} risk category. I recommend looking at the 'Action Plan' which suggests focusing on your CIBIL or assets."}
+            else:
+                return {"reply": f"Congratulations! Your application was approved with a {band} risk rating. This is a very strong profile."}
+
+    # General Knowledge logic
+    if "cibil" in msg:
+        return {"reply": "Your CIBIL score is a 3-digit summary of your credit history. Scores above 750 are generally required for instant approval."}
+    elif "dti" in msg or "income" in msg:
+        return {"reply": "Debt-to-Income (DTI) ratio measures how much of your income goes to EMIs. Keeping this below 40% is ideal."}
+    
+    return {"reply": "I am your AI Financial Advisor. You can ask me about your recent results or general financial health!"}
 
 # Mount the static files (built Next.js frontend)
 # We assume the 'static' directory contains the exported Next.js files

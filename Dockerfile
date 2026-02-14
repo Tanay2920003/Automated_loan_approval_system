@@ -15,7 +15,7 @@ COPY backend/requirements.txt ./backend/
 RUN pip install --no-cache-dir -r ./backend/requirements.txt
 
 # Copy backend code and model
-COPY backend/app.py backend/model.joblib ./backend/
+COPY backend/*.py backend/model.joblib ./backend/
 
 # Copy built frontend from Stage 1 into the backend's static directory
 COPY --from=frontend-builder /app/frontend/out ./backend/static

@@ -1,41 +1,41 @@
 @import "tailwindcss";
 
-/* ------------------------------
-   🎨 THEME VARIABLES
---------------------------------*/
+@theme {
+  --font-sans: "Inter", var(--font-geist-sans), ui-sans-serif, system-ui;
+
+  --color-base: #050b18;
+  --color-glass: rgba(255, 255, 255, 0.03);
+  --color-glass-strong: rgba(255, 255, 255, 0.08);
+  --color-stroke: rgba(255, 255, 255, 0.1);
+  --color-neon-blue: #3b82f6;
+  --color-neon-cyan: #22d3ee;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
   --accent: #2563eb;
-  /* Tailwind blue-600 */
   --accent-light: #60a5fa;
-  /* Tailwind blue-400 */
   --border-color: #d1d5db;
-  /* Tailwind gray-300 */
-  --placeholder: #080808;
-  /* Tailwind gray-500 - Text for placeholder and arrow */
+  --placeholder: #6b7280;
   --input-bg: #ffffff;
   --input-text: #1f2937;
-  /* gray-800 */
   --input-shadow: rgba(37, 99, 235, 0.15);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #121212;
-    --foreground: #e5e5e5;
+    --background: #050b18;
+    /* VISION UI NAVY BASE */
+    --foreground: #ffffff;
     --accent: #3b82f6;
     --label-color: #e5e5e5;
     --accent-light: #60a5fa;
-    --border-color: #4b5563;
-    /* gray-600 */
-    --placeholder: #0b0c0c;
-    /* gray-400 - Text for placeholder and arrow */
-    --input-bg: #1f2937;
-    /* soft dark gray input */
-    --input-text: #f9fafb;
-    /* light text */
-    --input-shadow: rgba(96, 165, 250, 0.25);
+    --border-color: rgba(255, 255, 255, 0.1);
+    --placeholder: #9ca3af;
+    --input-bg: rgba(255, 255, 255, 0.05);
+    --input-text: #ffffff;
+    --input-shadow: rgba(59, 130, 246, 0.25);
   }
 }
 
