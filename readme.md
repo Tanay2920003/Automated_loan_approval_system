@@ -188,14 +188,55 @@ POST /predict
 **Prediction Results:**
 ![alt text](images/image-4.png)
 
+**Docker Deployment View:**
+<img width="1896" height="1037" alt="image" src="https://github.com/user-attachments/assets/42b6bf93-f55f-4c8d-8611-0400feb5e7be" />
+
 ---
 
-## 🐳 Docker Deployment (Optional)
+## 🚀 Running the Application
 
-Build and run with Docker:
+### 1. Local Development (Separate Terminals)
+Run this if you want to make changes and see them instantly.
+
+**Backend:**
 ```bash
-docker-compose up --build
+cd backend
+# Create & activate venv as shown in Prerequisites
+pip install -r requirements.txt
+uvicorn app:app --reload
 ```
+
+**Frontend:**
+```bash
+cd frontend
+npm install
+npm run dev
+```
+Visit: `http://localhost:3000`
+
+---
+
+### 2. Docker Deployment (Single Command)
+Run this for a production-like environment using the consolidated Dockerfile.
+
+```bash
+docker compose up --build
+```
+Visit: `http://localhost:8000` (Both frontend and backend)
+
+---
+
+### 3. Docker in WSL (Windows Users)
+If you are using **WSL** with **Docker Desktop**:
+
+1. Ensure **Docker Desktop** is running.
+2. Go to **Settings > Resources > WSL Integration**.
+3. Enable integration for your specific WSL distribution (e.g., Ubuntu).
+4. In your WSL terminal, run:
+```bash
+docker compose up --build
+```
+Visit: `http://localhost:8000`
 
 ---
 

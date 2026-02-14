@@ -7,6 +7,9 @@ import numpy as np
 import shap 
 import sqlite3 
 import json
+import os
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 # --- Configuration ---
 MODEL_FILE = "model.joblib"
@@ -213,6 +216,32 @@ def predict_loan(data: LoanInput):
     }
 
 # Optional: basic health check route (EXISTING)
-@app.get("/")
-def home():
+@app.get("/health")
+def health():
     return {"message": "FinTech-Approve API is running. Model ready."}
+
+# Mount the static files (built Next.js frontend)
+# We assume the 'static' directory contains the exported Next.js files
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.exists(static_dir):
+    # Only mount subdirectories if they actually exist
+    next_static = os.path.join(static_dir, "_next")
+    if os.path.exists(next_static):
+        app.mount("/_next", StaticFiles(directory=next_static), name="next_static")
+    
+    images_static = os.path.join(static_dir, "images")
+    if os.path.exists(images_static):
+        app.mount("/images", StaticFiles(directory=images_static), name="images_static")
+    # Add other static mounts if needed (e.g., manifest.json, icons)
+
+@app.get("/{rest_of_path:path}")
+async def serve_frontend(rest_of_path: str):
+    # Try to serve a specific file if it exists in the static directory
+    file_path = os.path.join(static_dir, rest_of_path)
+    if os.path.isfile(file_path):
+        return FileResponse(file_path)
+    # Default to serving index.html for all other routes (SPA behavior)
+    index_path = os.path.join(static_dir, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return {"message": "Static files not found. Please build the frontend."}
