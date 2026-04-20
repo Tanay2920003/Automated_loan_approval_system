@@ -1,4 +1,8 @@
-from fastapi import FastAPI
+from typing import List, Literal
+
+import requests
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import joblib
@@ -11,10 +15,22 @@ from supabase import create_client, Client
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
+load_dotenv()
+
 # --- Configuration ---
 MODEL_FILE = "model.joblib"
 # Define the institutional risk policy threshold (50% chance of default or higher is rejection)
 RISK_THRESHOLD = 0.50 
+
+# Gemini AI chat configuration
+GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+FINANCE_SYSTEM_PROMPT = (
+    "You are FinTech-Approve's official AI assistant for financial and loan guidance. "
+    "Keep replies concise, professional, and directly related to topics like loans, credit scores, debt management, budgeting, or our approval predictor. "
+    "Use Markdown for formatting (lists, bold text). "
+    "If asked something non-financial, politely redirect them to finance. Be very helpful and always prioritize giving excellent well-structured advice."
+)
 
 # Initialize Supabase Client
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
@@ -130,6 +146,13 @@ class LoanInput(BaseModel):
     luxury_assets_value: float
     bank_asset_value: float
 
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+class ChatRequest(BaseModel):
+    messages: List[ChatMessage]
+
 # Prediction endpoint
 @app.post("/predict")
 def predict_loan(data: LoanInput):
@@ -206,6 +229,54 @@ def predict_loan(data: LoanInput):
         "loan_approval": loan_approval,
         "approval_probability": round(float(proba), 3) if proba is not None else None,
         "risk_drivers": risk_drivers 
+    }
+
+# Chat endpoint for Gemini proxy requests
+@app.post("/chat")
+def chat(request: ChatRequest):
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=500, detail="Server missing GEMINI_API_KEY.")
+
+    contents = [
+        {
+            "role": "MODEL" if message.role == "assistant" else "USER",
+            "parts": [{"text": message.content}],
+        }
+        for message in request.messages
+    ]
+
+    payload = {
+        "systemInstruction": {"parts": [{"text": FINANCE_SYSTEM_PROMPT}]},
+        "contents": contents,
+        "generationConfig": {
+            "temperature": 0.7,
+            "topP": 0.9,
+            "maxOutputTokens": 800,
+        },
+    }
+
+    response = requests.post(
+        f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}",
+        headers={"Content-Type": "application/json"},
+        json=payload,
+        timeout=30,
+    )
+
+    if not response.ok:
+        print(f"Gemini API failure: {response.status_code} - {response.text}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"Gemini API error {response.status_code}: {response.text}",
+        )
+
+    data = response.json()
+    candidate_content = data.get("candidates", [{}])[0].get("content", {})
+    assistant_reply = "".join(
+        part.get("text", "") for part in candidate_content.get("parts", [])
+    ).strip()
+
+    return {
+        "assistant_reply": assistant_reply or "Sorry, I am unable to generate a response right now.",
     }
 
 # Optional: basic health check route (EXISTING)

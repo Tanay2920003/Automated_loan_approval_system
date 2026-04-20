@@ -8,5 +8,7 @@ joblib
 shap>=0.44.1
 aiofiles
 python-multipart
+requests
+python-dotenv
 supabase>=2.3.0
 google-generativeai

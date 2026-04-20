@@ -311,8 +311,18 @@ export default function Home() {
     };
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
-      const res = await fetch(`${apiUrl}/predict`, {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL?.trim() || "";
+      const currentHostname = typeof window !== "undefined" ? window.location.hostname : "";
+      const shouldUseRelativePredict =
+        apiUrl.startsWith("http://localhost") &&
+        currentHostname !== "localhost" &&
+        currentHostname !== "127.0.0.1";
+      const endpoint = shouldUseRelativePredict
+        ? "/predict"
+        : apiUrl
+          ? `${apiUrl.replace(/\/$/, "")}/predict`
+          : "/predict";
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(submissionData),

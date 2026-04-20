@@ -10,13 +10,7 @@ type ChatMessage = {
   content: string;
 };
 
-const GEMINI_API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
-const GEMINI_MODEL = "gemini-2.5-flash";
-const FINANCE_SYSTEM_PROMPT =
-  "You are FinTech-Approve's official AI assistant for financial and loan guidance. " +
-  "Keep replies concise, professional, and directly related to topics like loans, credit scores, debt management, budgeting, or our approval predictor. " +
-  "Use Markdown for formatting (lists, bold text). " +
-  "If asked something non-financial, politely redirect them to finance. Be very helpful and always prioritize giving excellent well-structured advice.";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL?.trim() || "";
 
 const starterMessages: ChatMessage[] = [
   {
@@ -52,43 +46,41 @@ export default function FinanceChatbot() {
       // Filter out the initial starter message from the API request to prevent role sequence formatting errors (e.g. 400 Bad Request)
       const apiMessages = nextMessages.filter((msg, idx) => !(idx === 0 && msg.role === "assistant"));
 
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            systemInstruction: {
-              parts: [{ text: FINANCE_SYSTEM_PROMPT }]
-            },
-            contents: apiMessages.map((message) => ({
-              role: message.role === "assistant" ? "model" : "user",
-              parts: [{ text: message.content }],
-            })),
-            generationConfig: {
-              temperature: 0.7,
-              topP: 0.9,
-              maxOutputTokens: 800,
-            },
-          }),
-        }
-      );
+      const currentHostname = typeof window !== "undefined" ? window.location.hostname : "";
+      const shouldUseRelativeChat =
+        API_BASE_URL.startsWith("http://localhost") &&
+        currentHostname !== "localhost" &&
+        currentHostname !== "127.0.0.1";
+      const endpoint = shouldUseRelativeChat
+        ? "/chat"
+        : API_BASE_URL
+          ? `${API_BASE_URL.replace(/\/$/, "")}/chat`
+          : "/chat";
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages: apiMessages.map((message) => ({
+            role: message.role,
+            content: message.content,
+          })),
+        }),
+      });
 
       if (!response.ok) {
         if (response.status === 429) {
-          throw new Error("Too many requests (429). Please wait a moment .");
+          throw new Error("Too many requests (429). Please wait a moment.");
         }
         throw new Error(`Request failed with status ${response.status}`);
       }
 
       const data = await response.json();
       const assistantReply =
-        data?.candidates?.[0]?.content?.parts
-          ?.map((part: { text?: string }) => part.text || "")
-          .join("")
-          .trim() || "Sorry, I am unable to generate a response right now.";
+        data?.assistant_reply?.trim() ||
+        "Sorry, I am unable to generate a response right now.";
 
       setMessages((current) => [
         ...current,
