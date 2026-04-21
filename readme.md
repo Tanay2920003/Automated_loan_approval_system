@@ -106,6 +106,12 @@ Create a `.env` file in the `backend/` directory with your Supabase credentials:
 ```env
 SUPABASE_URL="your_supabase_project_url"
 SUPABASE_KEY="your_supabase_anon_key"
+GEMINI_API_KEY="your_gemini_api_key"
+```
+
+Create a `.env` file in the `frontend/` directory with your Supabase credentials:
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
 #### Step 5: Install Python dependencies
@@ -365,7 +371,7 @@ Visit: `http://localhost:8000`
 📊 **Audit Trail** - Supabase PostgreSQL securely logs all decisions for compliance  
 🔐 **CORS Enabled** - Frontend-backend communication secured  
 📱 **Responsive UI** - Modern Next.js frontend  
-🚀 **Fast API** - FastAPI with automatic documentation
+🚀 **Fast API** - FastAPI with automatic documentation  
 💬 **Chatbot** - Integrated AI assistant to help answer queries
 
 ---
