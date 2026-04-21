@@ -228,17 +228,20 @@ POST /predict
 ## 🖼️ Screenshots & Visuals
 
 **Data Analysis & Visualizations:**
-![alt text](images/image.png)
+![alt text](images/Analysis.png)
+
+**Dataset:**
+![alt text](images/Dataset.png)
 
 **User Interface:**
-![alt text](images/image-1.png)
-![alt text](images/image-2.png)
-
-**Application Interface:**
-![alt text](images/image-3.png)
+![alt text](<images/UI Dark.png>)
+![alt text](<images/UI Light.png>)
 
 **Prediction Results:**
-![alt text](images/image-4.png)
+![alt text](images/Prediction.png)
+
+**Chatbot:**
+![alt text](images/Chatbot.png)
 
 **Docker Deployment View:**
 ![alt text](images/Docker.png)
@@ -289,12 +292,12 @@ Skip building locally and run the pre-built image directly from Docker Hub.
 **Steps:**
 1. **Pull the image:**
 ```bash
-docker pull sudhanshugupta26/automated_loan_approval_system-app:05
+docker pull sudhanshugupta26/automated_loan_approval_system-app:06
 ```
 
 2. **Run the container:**
 ```bash
-docker run -d --name fintech_app -p 8000:8000 --env-file ./backend/.env sudhanshugupta26/automated_loan_approval_system-app:05
+docker run -d --name fintech_app -p 8000:8000 --env-file ./backend/.env sudhanshugupta26/automated_loan_approval_system-app:06
 ```
 
 3. **Visit the application:**
@@ -305,7 +308,7 @@ Create a `docker-compose.hub.yml` file:
 ```yaml
 services:
   app:
-    image: sudhanshugupta26/automated_loan_approval_system-app:05
+    image: sudhanshugupta26/automated_loan_approval_system-app:06
     ports:
       - "8000:8000"
     env_file:
@@ -363,6 +366,7 @@ Visit: `http://localhost:8000`
 🔐 **CORS Enabled** - Frontend-backend communication secured  
 📱 **Responsive UI** - Modern Next.js frontend  
 🚀 **Fast API** - FastAPI with automatic documentation
+💬 **Chatbot** - Integrated AI assistant to help answer queries
 
 ---
 
